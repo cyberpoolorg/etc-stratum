@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/robfig/cron"
 	"github.com/cyberpoolorg/etc-stratum/rpc"
 	"github.com/cyberpoolorg/etc-stratum/storage"
 	"github.com/cyberpoolorg/etc-stratum/util"
@@ -19,6 +21,14 @@ import (
 type ApiConfig struct {
 	Enabled              bool   `json:"enabled"`
 	Listen               string `json:"listen"`
+	PoolCharts           string `json:"poolCharts"`
+	PoolChartsNum        int64  `json:"poolChartsNum"`
+	MinerCharts          string `json:"minerCharts"`
+	MinerChartsNum       int64  `json:"minerChartsNum"`
+	NetCharts            string `json:"netCharts"`
+	NetChartsNum         int64  `json:"netChartsNum"`
+	ClientCharts         string `json:"netCharts"`
+	ClientChartsNum      int64  `json:"netChartsNum"`
 	StatsCollectInterval string `json:"statsCollectInterval"`
 	HashrateWindow       string `json:"hashrateWindow"`
 	HashrateLargeWindow  string `json:"hashrateLargeWindow"`
@@ -109,8 +119,112 @@ func (s *ApiServer) Start() {
 		}
 	}()
 
+	go func() {
+		c := cron.New()
+
+		poolCharts := s.config.PoolCharts
+		log.Printf("Pool charts config is :%v", poolCharts)
+		c.AddFunc(poolCharts, func() {
+			s.collectPoolCharts()
+		})
+
+		netCharts := s.config.NetCharts
+		log.Printf("Net charts config is :%v", netCharts)
+		c.AddFunc(netCharts, func() {
+			s.collectnetCharts()
+		})
+
+		clientCharts := s.config.ClientCharts
+		log.Printf("Client charts config is :%v", clientCharts)
+		c.AddFunc(clientCharts, func() {
+			s.collectclientCharts()
+		})
+
+		minerCharts := s.config.MinerCharts
+		log.Printf("Miner charts config is :%v", minerCharts)
+		c.AddFunc(minerCharts, func() {
+
+			miners, err := s.backend.GetAllMinerAccount()
+			if err != nil {
+				log.Println("Get all miners account error: ", err)
+			}
+			for _, login := range miners {
+				miner, _ := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login)
+				s.collectMinerCharts(login, miner["currentHashrate"].(int64), miner["hashrate"].(int64), miner["workersOnline"].(int64))
+			}
+		})
+
+		c.Start()
+	}()
+
 	if !s.config.PurgeOnly {
 		s.listen()
+	}
+}
+
+func (s *ApiServer) collectPoolCharts() {
+	ts := util.MakeTimestamp() / 1000
+	now := time.Now()
+	year, month, day := now.Date()
+	hour, min, _ := now.Clock()
+	t2 := fmt.Sprintf("%d-%02d-%02d %02d_%02d", year, month, day, hour, min)
+	stats := s.getStats()
+	hash := fmt.Sprint(stats["hashrate"])
+	log.Println("Pool Hash is ", ts, t2, hash)
+	err := s.backend.WritePoolCharts(ts, t2, hash)
+	if err != nil {
+		log.Printf("Failed to fetch pool charts from backend: %v", err)
+		return
+	}
+}
+
+func (s *ApiServer) collectclientCharts() {
+	ts := util.MakeTimestamp() / 1000
+	now := time.Now()
+	year, month, day := now.Date()
+	hour, min, _ := now.Clock()
+	t2 := fmt.Sprintf("%d-%02d-%02d %02d_%02d", year, month, day, hour, min)
+	stats := s.getStats()
+	client := fmt.Sprint(stats["minersTotal"])
+	log.Println("Client Count is ", ts, t2, client)
+	err := s.backend.WritePoolCharts(ts, t2, client)
+	if err != nil {
+		log.Printf("Failed to fetch client charts from backend: %v", err)
+		return
+	}
+}
+
+func (s *ApiServer) collectnetCharts() {
+	ts := util.MakeTimestamp() / 1000
+	now := time.Now()
+	year, month, day := now.Date()
+	hour, min, _ := now.Clock()
+	t2 := fmt.Sprintf("%d-%02d-%02d %02d_%02d", year, month, day, hour, min)
+	nodes, erro := s.backend.GetNodeStates()
+	if erro != nil {
+		log.Printf("Failed to fetch Diff charts from backend: %v", erro)
+		return
+	}
+	diff := fmt.Sprint(nodes[0]["difficulty"])
+	log.Println("Difficulty Hash is ", ts, t2, diff)
+	err := s.backend.WriteDiffCharts(ts, t2, diff)
+	if err != nil {
+		log.Printf("Failed to fetch Diff charts from backend: %v", err)
+		return
+	}
+}
+
+func (s *ApiServer) collectMinerCharts(login string, hash int64, largeHash int64, workerOnline int64) {
+	ts := util.MakeTimestamp() / 1000
+	now := time.Now()
+	year, month, day := now.Date()
+	hour, min, _ := now.Clock()
+	t2 := fmt.Sprintf("%d-%02d-%02d %02d_%02d", year, month, day, hour, min)
+
+	log.Println("Miner "+login+" Hash is", ts, t2, hash, largeHash)
+	err := s.backend.WriteMinerCharts(ts, t2, login, hash, largeHash, workerOnline)
+	if err != nil {
+		log.Printf("Failed to fetch miner %v charts from backend: %v", login, err)
 	}
 }
 
@@ -155,11 +269,15 @@ func (s *ApiServer) collectStats() {
 	}
 	if len(s.config.LuckWindow) > 0 {
 		stats["luck"], err = s.backend.CollectLuckStats(s.config.LuckWindow)
+		stats["luckCharts"], err = s.backend.CollectLuckCharts(s.config.LuckWindow[0])
 		if err != nil {
 			log.Printf("Failed to fetch luck stats from backend: %v", err)
 			return
 		}
 	}
+	stats["poolCharts"], err = s.backend.GetPoolCharts(s.config.PoolChartsNum)
+	stats["clientCharts"], err = s.backend.GetClientCharts(s.config.ClientChartsNum)
+	stats["netCharts"], err = s.backend.GetNetCharts(s.config.NetChartsNum)
 	s.stats.Store(stats)
 	log.Printf("Stats collection finished %s", time.Since(start))
 }
@@ -181,6 +299,9 @@ func (s *ApiServer) StatsIndex(w http.ResponseWriter, r *http.Request) {
 	if stats != nil {
 		reply["now"] = util.MakeTimestamp()
 		reply["stats"] = stats["stats"]
+		reply["poolCharts"] = stats["poolCharts"]
+		reply["clientsCharts"] = stats["clientsCharts"]
+		reply["netCharts"] = stats["netCharts"]
 		reply["hashrate"] = stats["hashrate"]
 		reply["minersTotal"] = stats["minersTotal"]
 		reply["maturedTotal"] = stats["maturedTotal"]
@@ -231,6 +352,7 @@ func (s *ApiServer) BlocksIndex(w http.ResponseWriter, r *http.Request) {
 		reply["candidates"] = stats["candidates"]
 		reply["candidatesTotal"] = stats["candidatesTotal"]
 		reply["luck"] = stats["luck"]
+		reply["luckCharts"] = stats["luckCharts"]
 	}
 
 	err := json.NewEncoder(w).Encode(reply)
@@ -299,6 +421,8 @@ func (s *ApiServer) AccountIndex(w http.ResponseWriter, r *http.Request) {
 			stats[key] = value
 		}
 		stats["pageSize"] = s.config.Payments
+		stats["minerCharts"], err = s.backend.GetMinerCharts(s.config.MinerChartsNum, login)
+		stats["paymentCharts"], err = s.backend.GetPaymentCharts(login)
 		reply = &Entry{stats: stats, updatedAt: now}
 		s.miners[login] = reply
 	}
