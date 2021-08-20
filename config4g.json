@@ -4,6 +4,9 @@
 	"name": "main",
 	"network": "classic",
 
+	"avgBlockTime": 14.4,
+	"blockTimeWindow": 300,
+
 	"proxy": {
 		"enabled": true,
 		"listen": "0.0.0.0:9994",

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"gopkg.in/redis.v3"
-
 	"github.com/cyberpoolorg/etc-stratum/util"
 )
 
@@ -118,7 +117,7 @@ func (r *RedisClient) GetWhitelist() ([]string, error) {
 	return cmd.Val(), nil
 }
 
-func (r *RedisClient) WriteNodeState(id string, height uint64, diff *big.Int) error {
+func (r *RedisClient) WriteNodeState(id string, height uint64, diff *big.Int, blocktime float64) error {
 	tx := r.client.Multi()
 	defer tx.Close()
 
@@ -129,6 +128,7 @@ func (r *RedisClient) WriteNodeState(id string, height uint64, diff *big.Int) er
 		tx.HSet(r.formatKey("nodes"), join(id, "height"), strconv.FormatUint(height, 10))
 		tx.HSet(r.formatKey("nodes"), join(id, "difficulty"), diff.String())
 		tx.HSet(r.formatKey("nodes"), join(id, "lastBeat"), strconv.FormatInt(now, 10))
+		tx.HSet(r.formatKey("nodes"), join(id, "blocktime"), strconv.FormatFloat(blocktime, 'f', 4, 64))
 		return nil
 	})
 	return err
@@ -160,7 +160,7 @@ func (r *RedisClient) GetNodeStates() ([]map[string]interface{}, error) {
 }
 
 func (r *RedisClient) checkPoWExist(height uint64, params []string) (bool, error) {
-	// Sweep PoW backlog for previous blocks, we have 3 templates back in RAM
+
 	r.client.ZRemRangeByScore(r.formatKey("pow"), "-inf", fmt.Sprint("(", height-8))
 	val, err := r.client.ZAdd(r.formatKey("pow"), redis.Z{Score: float64(height), Member: strings.Join(params, ":")}).Result()
 	return val == 0, err
@@ -194,7 +194,7 @@ func (r *RedisClient) WriteBlock(login, id string, params []string, diff, roundD
 	if err != nil {
 		return false, err
 	}
-	// Duplicate share, (nonce, powHash, mixDigest) pair exist
+
 	if exist {
 		return true, nil
 	}

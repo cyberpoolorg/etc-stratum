@@ -6,13 +6,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/mux"
-
 	"github.com/cyberpoolorg/etc-stratum/policy"
 	"github.com/cyberpoolorg/etc-stratum/rpc"
 	"github.com/cyberpoolorg/etc-stratum/storage"
@@ -29,8 +29,6 @@ type ProxyServer struct {
 	policy             *policy.PolicyServer
 	hashrateExpiration time.Duration
 	failsCount         int64
-
-	// Stratum
 	sessionsMu sync.RWMutex
 	sessions   map[*Session]struct{}
 	timeout    time.Duration
@@ -46,8 +44,6 @@ type jobDetails struct {
 type Session struct {
 	ip  string
 	enc *json.Encoder
-
-	// Stratum
 	sync.Mutex
 	conn           *net.TCPConn
 	login          string
@@ -116,12 +112,39 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 			case <-stateUpdateTimer.C:
 				t := proxy.currentBlockTemplate()
 				if t != nil {
-					err := backend.WriteNodeState(cfg.Name, t.Height, t.Difficulty)
-					if err != nil {
-						log.Printf("Failed to write node state to backend: %v", err)
-						proxy.markSick()
+					rpc := proxy.rpc()
+					height := int64(t.Height) - 1
+					prev := height - cfg.BlockTimeWindow
+					if prev < 0 {
+						prev = 0
+					}
+					n := height - prev
+					if n > 0 {
+						block, err := rpc.GetBlockByHeight(height)
+						if err != nil || block == nil {
+							log.Printf("Error while retrieving block from node: %v", err)
+							proxy.markSick()
+						} else {
+							timestamp, _ := strconv.ParseInt(strings.Replace(block.Timestamp, "0x", "", -1), 16, 64)
+							prevblock, _ := rpc.GetBlockByHeight(prev)
+							prevtime, _ := strconv.ParseInt(strings.Replace(prevblock.Timestamp, "0x", "", -1), 16, 64)
+							blocktime := float64(timestamp-prevtime) / float64(n)
+							err = backend.WriteNodeState(cfg.Name, t.Height, t.Difficulty, blocktime)
+							if err != nil {
+								log.Printf("Failed to write node state to backend: %v", err)
+								proxy.markSick()
+							} else {
+								proxy.markOk()
+							}
+						}
 					} else {
-						proxy.markOk()
+						err := backend.WriteNodeState(cfg.Name, t.Height, t.Difficulty, cfg.AvgBlockTime)
+						if err != nil {
+							log.Printf("Failed to write node state to backend: %v", err)
+							proxy.markSick()
+						} else {
+							proxy.markOk()
+						}
 					}
 				}
 				stateUpdateTimer.Reset(stateUpdateIntv)
@@ -238,7 +261,6 @@ func (cs *Session) handleMessage(s *ProxyServer, r *http.Request, req *JSONRpcRe
 		return
 	}
 
-	// Handle RPC methods
 	switch req.Method {
 	case "eth_getWork":
 		reply, errReply := s.handleGetWorkRPC(cs)

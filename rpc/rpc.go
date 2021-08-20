@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
-
 	"github.com/cyberpoolorg/etc-stratum/util"
 )
 
@@ -35,10 +34,10 @@ type GetBlockReply struct {
 	Difficulty   string   `json:"difficulty"`
 	GasLimit     string   `json:"gasLimit"`
 	GasUsed      string   `json:"gasUsed"`
+	Timestamp    string   `json:"timestamp"`
 	Transactions []Tx     `json:"transactions"`
 	Uncles       []string `json:"uncles"`
-	// https://github.com/ethereum/EIPs/issues/95
-	SealFields []string `json:"sealFields"`
+	SealFields   []string `json:"sealFields"`
 }
 
 type GetBlockReplyPart struct {
