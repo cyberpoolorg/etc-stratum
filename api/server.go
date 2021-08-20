@@ -27,8 +27,8 @@ type ApiConfig struct {
 	MinerChartsNum       int64  `json:"minerChartsNum"`
 	NetCharts            string `json:"netCharts"`
 	NetChartsNum         int64  `json:"netChartsNum"`
-	ClientCharts         string `json:"netCharts"`
-	ClientChartsNum      int64  `json:"netChartsNum"`
+	ClientCharts         string `json:"clientCharts"`
+	ClientChartsNum      int64  `json:"clientChartsNum"`
 	StatsCollectInterval string `json:"statsCollectInterval"`
 	HashrateWindow       string `json:"hashrateWindow"`
 	HashrateLargeWindow  string `json:"hashrateLargeWindow"`
@@ -300,7 +300,7 @@ func (s *ApiServer) StatsIndex(w http.ResponseWriter, r *http.Request) {
 		reply["now"] = util.MakeTimestamp()
 		reply["stats"] = stats["stats"]
 		reply["poolCharts"] = stats["poolCharts"]
-		reply["clientsCharts"] = stats["clientsCharts"]
+		reply["clientCharts"] = stats["clientCharts"]
 		reply["netCharts"] = stats["netCharts"]
 		reply["hashrate"] = stats["hashrate"]
 		reply["minersTotal"] = stats["minersTotal"]
