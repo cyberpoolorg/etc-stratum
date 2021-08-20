@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/yvasiyarov/gorelic"
-
 	"github.com/cyberpoolorg/etc-stratum/api"
 	"github.com/cyberpoolorg/etc-stratum/payouts"
 	"github.com/cyberpoolorg/etc-stratum/proxy"
@@ -28,7 +28,8 @@ func startProxy() {
 }
 
 func startApi() {
-	s := api.NewApiServer(&cfg.Api, backend)
+	settings := structs.Map(&cfg)
+	s := api.NewApiServer(&cfg.Api, settings, backend)
 	s.Start()
 }
 
