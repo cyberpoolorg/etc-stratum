@@ -456,7 +456,7 @@ func (r *RedisClient) WriteShare(login, id string, params []string, diff int64, 
 	if err != nil {
 		return false, err
 	}
-	// Duplicate share, (nonce, powHash, mixDigest) pair exist
+
 	if exist {
 		return true, nil
 	}
@@ -775,7 +775,6 @@ func (r *RedisClient) WriteMaturedBlock(block *BlockData, roundRewards map[strin
 		total := int64(0)
 		for login, amount := range roundRewards {
 			total += amount
-			// NOTICE: Maybe expire round reward entry in 604800 (a week)?
 			tx.HIncrBy(r.formatKey("miners", login), "balance", amount)
 			tx.HSetNX(r.formatKey("credits", block.Height, block.Hash), login, strconv.FormatInt(amount, 10))
 		}
@@ -976,6 +975,11 @@ func (r *RedisClient) CollectStats(smallWindow time.Duration, maxBlocks, maxPaym
 	stats["miners"] = miners
 	stats["minersTotal"] = len(miners)
 	stats["hashrate"] = totalHashrate
+
+	workers := convertWorkersStats(window, cmds[1].(*redis.ZSliceCmd))
+	stats["workers"] = workers
+	stats["workersTotal"] = len(workers)
+
 	return stats, nil
 }
 
@@ -1159,7 +1163,7 @@ func convertBlockResults(rows ...*redis.ZSliceCmd) []*BlockData {
 	var result []*BlockData
 	for _, row := range rows {
 		for _, v := range row.Val() {
-			// "uncleHeight:orphan:nonce:blockHash:timestamp:diff:totalShares:rewardInWei"
+
 			block := BlockData{}
 			block.Height = int64(v.Score)
 			block.RoundHeight = block.Height
@@ -1191,11 +1195,8 @@ func convertWorkersStats(window int64, raw *redis.ZSliceCmd) map[string]Worker {
 		id := parts[1]
 		score := int64(v.Score)
 		worker := workers[id]
-
-		// Add for large window
 		worker.TotalHR += share
 
-		// Add for small window if matches
 		if score >= now-window {
 			worker.HR += share
 		}
@@ -1261,7 +1262,7 @@ func convertPaymentsResults(raw *redis.ZSliceCmd) []map[string]interface{} {
 		tx["timestamp"] = int64(v.Score)
 		fields := strings.Split(v.Member.(string), ":")
 		tx["tx"] = fields[0]
-		// Individual or whole payments row
+
 		if len(fields) < 3 {
 			tx["amount"], _ = strconv.ParseInt(fields[1], 10, 64)
 		} else {
