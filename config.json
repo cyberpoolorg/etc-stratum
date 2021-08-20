@@ -83,7 +83,7 @@
 	"redis": {
 		"endpoint": "127.0.0.1:6379",
 		"poolSize": 10,
-		"database": 18,
+		"database": 20,
 		"password": ""
 	},
 
