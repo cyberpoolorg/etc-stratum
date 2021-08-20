@@ -187,7 +187,7 @@ func (s *ApiServer) collectclientCharts() {
 	stats := s.getStats()
 	client := fmt.Sprint(stats["minersTotal"])
 	log.Println("Client Count is ", ts, t2, client)
-	err := s.backend.WritePoolCharts(ts, t2, client)
+	err := s.backend.WriteClientCharts(ts, t2, client)
 	if err != nil {
 		log.Printf("Failed to fetch client charts from backend: %v", err)
 		return
