@@ -68,7 +68,9 @@
 		"netCharts":"0 */10 * * * *",
 		"netChartsNum":72,
 		"clientCharts":"0 */10 * * * *",
-		"clientChartsNum":72
+		"clientChartsNum":72,
+		"workerCharts":"0 */10 * * * *",
+		"workerChartsNum":72
 	},
 
 	"upstreamCheckInterval": "5s",
@@ -83,7 +85,7 @@
 	"redis": {
 		"endpoint": "127.0.0.1:6379",
 		"poolSize": 10,
-		"database": 20,
+		"database": 8,
 		"password": ""
 	},
 
