@@ -29,6 +29,8 @@ type ApiConfig struct {
 	NetChartsNum         int64  `json:"netChartsNum"`
 	ClientCharts         string `json:"clientCharts"`
 	ClientChartsNum      int64  `json:"clientChartsNum"`
+	WorkerCharts         string `json:"workerCharts"`
+	WorkerChartsNum      int64  `json:"workerChartsNum"`
 	StatsCollectInterval string `json:"statsCollectInterval"`
 	HashrateWindow       string `json:"hashrateWindow"`
 	HashrateLargeWindow  string `json:"hashrateLargeWindow"`
@@ -139,6 +141,12 @@ func (s *ApiServer) Start() {
 		c.AddFunc(clientCharts, func() {
 			s.collectclientCharts()
 		})
+		
+		workerCharts := s.config.workerCharts
+		log.Printf("Worker charts config is :%v", workerCharts)
+		c.AddFunc(workerCharts, func() {
+			s.collectworkerCharts()
+		})
 
 		minerCharts := s.config.MinerCharts
 		log.Printf("Miner charts config is :%v", minerCharts)
@@ -190,6 +198,22 @@ func (s *ApiServer) collectclientCharts() {
 	err := s.backend.WriteClientCharts(ts, t2, client)
 	if err != nil {
 		log.Printf("Failed to fetch client charts from backend: %v", err)
+		return
+	}
+}
+
+func (s *ApiServer) collectworkerCharts() {
+	ts := util.MakeTimestamp() / 1000
+	now := time.Now()
+	year, month, day := now.Date()
+	hour, min, _ := now.Clock()
+	t2 := fmt.Sprintf("%d-%02d-%02d %02d_%02d", year, month, day, hour, min)
+	stats := s.getStats()
+	client := fmt.Sprint(stats["totalWorkers"])
+	log.Println("Worker Count is ", ts, t2, client)
+	err := s.backend.WriteWorkerCharts(ts, t2, client)
+	if err != nil {
+		log.Printf("Failed to fetch worker charts from backend: %v", err)
 		return
 	}
 }
@@ -278,6 +302,7 @@ func (s *ApiServer) collectStats() {
 	stats["poolCharts"], err = s.backend.GetPoolCharts(s.config.PoolChartsNum)
 	stats["clientCharts"], err = s.backend.GetClientCharts(s.config.ClientChartsNum)
 	stats["netCharts"], err = s.backend.GetNetCharts(s.config.NetChartsNum)
+	stats["totalWorkers"] = s.getWorkersNumber()
 	s.stats.Store(stats)
 	log.Printf("Stats collection finished %s", time.Since(start))
 }
@@ -307,13 +332,26 @@ func (s *ApiServer) StatsIndex(w http.ResponseWriter, r *http.Request) {
 		reply["maturedTotal"] = stats["maturedTotal"]
 		reply["immatureTotal"] = stats["immatureTotal"]
 		reply["candidatesTotal"] = stats["candidatesTotal"]
-		reply["workersTotal"] = stats["workersTotal"]
+		reply["totalWorkers"] = stats["totalWorkers"]
 	}
 
 	err = json.NewEncoder(w).Encode(reply)
 	if err != nil {
 		log.Println("Error serializing API response: ", err)
 	}
+}
+
+func (s *ApiServer) getWorkersNumber() (int64){
+	numberofWorker := int64(0)
+	miners, err := s.backend.GetAllMinerAccount()
+	if err != nil {
+		log.Println("Get all miners account error: ", err)
+	}
+	for _, login := range miners {
+		miner, _ := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login)
+		numberofWorker += miner["workersOnline"].(int64)
+	}
+	return numberofWorker
 }
 
 func (s *ApiServer) MinersIndex(w http.ResponseWriter, r *http.Request) {
