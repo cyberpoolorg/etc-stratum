@@ -436,7 +436,7 @@ func (r *RedisClient) GetWorkerCharts(workerTotLen int64) (stats []*WorkerCharts
 	return stats, nil
 }
 
-func convertClientChartsResults(raw *redis.ZSliceCmd) []*WorkerCharts {
+func convertWorkerChartsResults(raw *redis.ZSliceCmd) []*WorkerCharts {
 	var result []*WorkerCharts
 	for _, v := range raw.Val() {
 
