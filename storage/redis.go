@@ -65,6 +65,13 @@ type ClientCharts struct {
 	TimeFormat string `json:"timeFormat"`
 	ClientTot  int64  `json:"y"`
 }
+
+type WorkerCharts struct {
+	Timestamp  int64  `json:"x"`
+	TimeFormat string `json:"timeFormat"`
+	WorkerTot  int64  `json:"y"`
+}
+
 type BlockData struct {
 	Height         int64    `json:"height"`
 	Timestamp      int64    `json:"timestamp"`
@@ -178,6 +185,12 @@ func (r *RedisClient) WriteDiffCharts(time1 int64, time2 string, netHash string)
 func (r *RedisClient) WriteClientCharts(time1 int64, time2 string, clientTot string) error {
 	s := join(time1, time2, clientTot)
 	cmd := r.client.ZAdd(r.formatKey("charts", "client"), redis.Z{Score: float64(time1), Member: s})
+	return cmd.Err()
+}
+
+func (r *RedisClient) WriteWorkerCharts(time1 int64, time2 string, workerTot string) error {
+	s := join(time1, time2, workerTot)
+	cmd := r.client.ZAdd(r.formatKey("charts", "worker"), redis.Z{Score: float64(time1), Member: s})
 	return cmd.Err()
 }
 
@@ -396,6 +409,46 @@ func convertClientChartsResults(raw *redis.ZSliceCmd) []*ClientCharts {
 	}
 
 	var reverse []*ClientCharts
+	for i := len(result) - 1; i >= 0; i-- {
+		reverse = append(reverse, result[i])
+	}
+	return reverse
+}
+
+func (r *RedisClient) GetWorkerCharts(workerTotLen int64) (stats []*WorkerCharts, err error) {
+
+	tx := r.client.Multi()
+	defer tx.Close()
+
+	now := util.MakeTimestamp() / 1000
+
+	cmds, err := tx.Exec(func() error {
+		tx.ZRemRangeByScore(r.formatKey("charts", "worker"), "-inf", fmt.Sprint("(", now-172800))
+		tx.ZRevRangeWithScores(r.formatKey("charts", "worker"), 0, workerTotLen)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats = convertWorkerChartsResults(cmds[1].(*redis.ZSliceCmd))
+	return stats, nil
+}
+
+func convertClientChartsResults(raw *redis.ZSliceCmd) []*WorkerCharts {
+	var result []*WorkerCharts
+	for _, v := range raw.Val() {
+
+		wc := WorkerCharts{}
+		wc.Timestamp = int64(v.Score)
+		str := v.Member.(string)
+		wc.TimeFormat = str[strings.Index(str, ":")+1 : strings.LastIndex(str, ":")]
+		wc.WorkerTot, _ = strconv.ParseInt(str[strings.LastIndex(str, ":")+1:], 10, 64)
+		result = append(result, &wc)
+	}
+
+	var reverse []*WorkerCharts
 	for i := len(result) - 1; i >= 0; i-- {
 		reverse = append(reverse, result[i])
 	}
