@@ -300,8 +300,9 @@ func (s *ApiServer) collectStats() {
 		}
 	}
 	stats["poolCharts"], err = s.backend.GetPoolCharts(s.config.PoolChartsNum)
-	stats["clientCharts"], err = s.backend.GetClientCharts(s.config.ClientChartsNum)
 	stats["netCharts"], err = s.backend.GetNetCharts(s.config.NetChartsNum)
+	stats["clientCharts"], err = s.backend.GetClientCharts(s.config.ClientChartsNum)
+	stats["workerCharts"], err = s.backend.GetWokerCharts(s.config.WorkerChartsNum)
 	stats["totalWorkers"] = s.getWorkersNumber()
 	s.stats.Store(stats)
 	log.Printf("Stats collection finished %s", time.Since(start))
@@ -325,14 +326,15 @@ func (s *ApiServer) StatsIndex(w http.ResponseWriter, r *http.Request) {
 		reply["now"] = util.MakeTimestamp()
 		reply["stats"] = stats["stats"]
 		reply["poolCharts"] = stats["poolCharts"]
-		reply["clientCharts"] = stats["clientCharts"]
 		reply["netCharts"] = stats["netCharts"]
+		reply["clientCharts"] = stats["clientCharts"]
+		reply["workerCharts"] = stats["workerCharts"]
 		reply["hashrate"] = stats["hashrate"]
 		reply["minersTotal"] = stats["minersTotal"]
+		reply["totalWorkers"] = stats["totalWorkers"]
 		reply["maturedTotal"] = stats["maturedTotal"]
 		reply["immatureTotal"] = stats["immatureTotal"]
 		reply["candidatesTotal"] = stats["candidatesTotal"]
-		reply["totalWorkers"] = stats["totalWorkers"]
 	}
 
 	err = json.NewEncoder(w).Encode(reply)
