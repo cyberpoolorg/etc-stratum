@@ -302,7 +302,7 @@ func (s *ApiServer) collectStats() {
 	stats["poolCharts"], err = s.backend.GetPoolCharts(s.config.PoolChartsNum)
 	stats["netCharts"], err = s.backend.GetNetCharts(s.config.NetChartsNum)
 	stats["clientCharts"], err = s.backend.GetClientCharts(s.config.ClientChartsNum)
-	stats["workerCharts"], err = s.backend.GetWokerCharts(s.config.WorkerChartsNum)
+	stats["workerCharts"], err = s.backend.GetWorkerCharts(s.config.WorkerChartsNum)
 	stats["totalWorkers"] = s.getWorkersNumber()
 	s.stats.Store(stats)
 	log.Printf("Stats collection finished %s", time.Since(start))
