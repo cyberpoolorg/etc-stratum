@@ -142,7 +142,7 @@ func (s *ApiServer) Start() {
 			s.collectclientCharts()
 		})
 		
-		workerCharts := s.config.workerCharts
+		workerCharts := s.config.WorkerCharts
 		log.Printf("Worker charts config is :%v", workerCharts)
 		c.AddFunc(workerCharts, func() {
 			s.collectworkerCharts()
