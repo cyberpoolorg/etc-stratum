@@ -975,10 +975,6 @@ func (r *RedisClient) CollectStats(smallWindow time.Duration, maxBlocks, maxPaym
 	stats["miners"] = miners
 	stats["minersTotal"] = len(miners)
 	stats["hashrate"] = totalHashrate
-	
-	workers := convertWorkersStats(window, cmds[1].(*redis.ZSliceCmd))
-	stats["workers"] = workers
-	stats["workersTotal"] = len(workers)
 
 	return stats, nil
 }
