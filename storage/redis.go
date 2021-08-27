@@ -582,7 +582,7 @@ func (r *RedisClient) writeShare(tx *redis.Multi, ms, ts int64, login, id string
 	tx.HIncrBy(r.formatKey("shares", "roundCurrent"), login, diff)
 	tx.ZAdd(r.formatKey("hashrate"), redis.Z{Score: float64(ts), Member: join(diff, login, id, ms)})
 	tx.ZAdd(r.formatKey("hashrate", login), redis.Z{Score: float64(ts), Member: join(diff, id, ms)})
-	tx.Expire(r.formatKey("hashrate", login), expire) // Will delete hashrates for miners that gone
+	tx.Expire(r.formatKey("hashrate", login), expire)
 	tx.HSet(r.formatKey("miners", login), "lastShare", strconv.FormatInt(ts, 10))
 }
 
@@ -1042,7 +1042,7 @@ func (r *RedisClient) CollectStats(smallWindow time.Duration, maxBlocks, maxPaym
 	return stats, nil
 }
 
-func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login string,  maxBlocks int64) (map[string]interface{}, error) {
+func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login string, maxBlocks int64) (map[string]interface{}, error) {
 	smallWindow := int64(sWindow / time.Second)
 	largeWindow := int64(lWindow / time.Second)
 	stats := make(map[string]interface{})
