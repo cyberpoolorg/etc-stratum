@@ -72,6 +72,15 @@ type WorkerCharts struct {
 	WorkerTot  int64  `json:"y"`
 }
 
+type Finder struct {
+	ID          string `json:"id"`
+	Height      int64  `json:"height"`
+	UncleHeight int64  `json:"uncleHeight,omitempty"`
+	Hash        string `json:"hash,omitempty"`
+	Reward      string `json:"reward"`
+	Timestamp   int64  `json:"timestamp"`
+}
+
 type BlockData struct {
 	Height         int64    `json:"height"`
 	Timestamp      int64    `json:"timestamp"`
@@ -548,6 +557,7 @@ func (r *RedisClient) WriteBlock(login, id string, params []string, diff, roundD
 		tx.HDel(r.formatKey("stats"), "roundShares")
 		tx.ZIncrBy(r.formatKey("finders"), 1, login)
 		tx.HIncrBy(r.formatKey("miners", login), "blocksFound", 1)
+		tx.ZAdd(r.formatKey("finders", login), redis.Z{Score: float64(ts), Member: join(height, id, ms)})
 		tx.Rename(r.formatKey("shares", "roundCurrent"), r.formatRound(int64(height), params[0]))
 		tx.HGetAllMap(r.formatRound(int64(height), params[0]))
 		return nil
@@ -555,7 +565,7 @@ func (r *RedisClient) WriteBlock(login, id string, params []string, diff, roundD
 	if err != nil {
 		return false, err
 	} else {
-		sharesMap, _ := cmds[10].(*redis.StringStringMapCmd).Result()
+		sharesMap, _ := cmds[11].(*redis.StringStringMapCmd).Result()
 		totalShares := int64(0)
 		for _, v := range sharesMap {
 			n, _ := strconv.ParseInt(v, 10, 64)
@@ -1032,7 +1042,7 @@ func (r *RedisClient) CollectStats(smallWindow time.Duration, maxBlocks, maxPaym
 	return stats, nil
 }
 
-func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login string) (map[string]interface{}, error) {
+func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login string,  maxBlocks int64) (map[string]interface{}, error) {
 	smallWindow := int64(sWindow / time.Second)
 	largeWindow := int64(lWindow / time.Second)
 	stats := make(map[string]interface{})
@@ -1045,6 +1055,9 @@ func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login 
 	cmds, err := tx.Exec(func() error {
 		tx.ZRemRangeByScore(r.formatKey("hashrate", login), "-inf", fmt.Sprint("(", now-largeWindow))
 		tx.ZRangeWithScores(r.formatKey("hashrate", login), 0, -1)
+		if maxBlocks > 0 {
+			tx.ZRevRangeWithScores(r.formatKey("finders", login), 0, maxBlocks-1)
+		}
 		return nil
 	})
 
@@ -1093,6 +1106,12 @@ func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login 
 	stats["workersOffline"] = offline
 	stats["hashrate"] = totalHashrate
 	stats["currentHashrate"] = currentHashrate
+	
+	if maxBlocks > 0 && cmds[2].Err() == nil {
+		finders := r.convertFindersStats(cmds[2].(*redis.ZSliceCmd))
+		stats["finders"] = finders
+	}
+	
 	return stats, nil
 }
 
@@ -1321,4 +1340,49 @@ func convertPaymentsResults(raw *redis.ZSliceCmd) []map[string]interface{} {
 		result = append(result, tx)
 	}
 	return result
+}
+
+func (r *RedisClient) convertFindersStats(raw *redis.ZSliceCmd) []*Finder {
+	var finders []*Finder
+
+	for _, v := range raw.Val() {
+		finder := Finder{}
+		parts := strings.Split(v.Member.(string), ":")
+		height, _ := strconv.ParseInt(parts[0], 10, 64)
+		timestamp := int64(v.Score)
+		id := parts[1]
+
+		option := redis.ZRangeByScore{Min: parts[0], Max: strconv.FormatInt(height+7, 10)}
+		cmd := r.client.ZRangeByScoreWithScores(r.formatKey("blocks", "matured"), option)
+		if cmd.Err() != nil || len(cmd.Val()) == 0 {
+			continue
+		}
+		for _, w := range cmd.Val() {
+			parts = strings.Split(w.Member.(string), ":")
+			if parts[0] != "0" {
+				uncleHeight, _ := strconv.ParseInt(parts[0], 10, 64)
+
+				if uncleHeight != height {
+					continue
+				}
+				finder.UncleHeight = uncleHeight
+				finder.Height = int64(w.Score)
+			} else {
+				finder.Height = height
+			}
+			finder.Hash = parts[3]
+			finder.Reward = parts[7]
+			break
+		}
+
+		finder.ID = id
+		finder.Timestamp = timestamp
+		finders = append(finders, &finder)
+	}
+
+	var reverse []*Finder
+	for i := len(finders) - 1; i >= 0; i-- {
+		reverse = append(reverse, finders[i])
+	}
+	return finders
 }
