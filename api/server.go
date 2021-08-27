@@ -157,7 +157,7 @@ func (s *ApiServer) Start() {
 				log.Println("Get all miners account error: ", err)
 			}
 			for _, login := range miners {
-				miner, _ := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login)
+				miner, _ := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login, 0)
 				s.collectMinerCharts(login, miner["currentHashrate"].(int64), miner["hashrate"].(int64), miner["workersOnline"].(int64))
 			}
 		})
@@ -350,7 +350,7 @@ func (s *ApiServer) getWorkersNumber() (int64){
 		log.Println("Get all miners account error: ", err)
 	}
 	for _, login := range miners {
-		miner, _ := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login)
+		miner, _ := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login, 0)
 		numberofWorker += miner["workersOnline"].(int64)
 	}
 	return numberofWorker
@@ -452,7 +452,7 @@ func (s *ApiServer) AccountIndex(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Failed to fetch stats from backend: %v", err)
 			return
 		}
-		workers, err := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login)
+		workers, err := s.backend.CollectWorkersStats(s.hashrateWindow, s.hashrateLargeWindow, login, 0)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("Failed to fetch stats from backend: %v", err)
