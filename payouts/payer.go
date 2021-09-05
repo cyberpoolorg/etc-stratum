@@ -27,7 +27,6 @@ type PayoutsConfig struct {
 	Gas          string `json:"gas"`
 	GasPrice     string `json:"gasPrice"`
 	AutoGas      bool   `json:"autoGas"`
-	// In Shannon
 	Threshold int64 `json:"threshold"`
 	BgSave    bool  `json:"bgsave"`
 }
@@ -120,7 +119,6 @@ func (u *PayoutsProcessor) process() {
 		amount, _ := u.backend.GetBalance(login)
 		amountInShannon := big.NewInt(amount)
 
-		// Shannon^2 = Wei
 		amountInWei := new(big.Int).Mul(amountInShannon, util.Shannon)
 
 		if !u.reachedThreshold(amountInShannon) {
@@ -128,7 +126,6 @@ func (u *PayoutsProcessor) process() {
 		}
 		mustPay++
 
-		// Require active peers before processing
 		if !u.checkPeers() {
 			break
 		}
@@ -137,7 +134,6 @@ func (u *PayoutsProcessor) process() {
 			break
 		}
 
-		// Check if we have enough funds
 		poolBalance, err := u.rpc.GetBalance(u.config.Address)
 		if err != nil {
 			u.halt = true
@@ -152,7 +148,6 @@ func (u *PayoutsProcessor) process() {
 			break
 		}
 
-		// Lock payments for current payout
 		err = u.backend.LockPayouts(login, amount)
 		if err != nil {
 			log.Printf("Failed to lock payment for %s: %v", login, err)
@@ -162,7 +157,6 @@ func (u *PayoutsProcessor) process() {
 		}
 		log.Printf("Locked payment for %s, %v Shannon", login, amount)
 
-		// Debit miner's balance and update stats
 		err = u.backend.UpdateBalance(login, amount)
 		if err != nil {
 			log.Printf("Failed to update balance for %s, %v Shannon: %v", login, amount, err)
@@ -181,7 +175,6 @@ func (u *PayoutsProcessor) process() {
 			break
 		}
 
-		// Log transaction hash
 		err = u.backend.WritePayment(login, txHash, amount)
 		if err != nil {
 			log.Printf("Failed to log payment data for %s, %v Shannon, tx: %s: %v", login, amount, txHash, err)
@@ -194,7 +187,6 @@ func (u *PayoutsProcessor) process() {
 		totalAmount.Add(totalAmount, big.NewInt(amount))
 		log.Printf("Paid %v Shannon to %v, TxHash: %v", amount, login, txHash)
 
-		// Wait for TX confirmation before further payouts
 		for {
 			log.Printf("Waiting for tx confirmation: %v", txHash)
 			time.Sleep(txCheckInterval)
@@ -221,7 +213,6 @@ func (u *PayoutsProcessor) process() {
 		log.Println("No payees that have reached payout threshold")
 	}
 
-	// Save redis state to disk
 	if minersPaid > 0 && u.config.BgSave {
 		u.bgSave()
 	}
