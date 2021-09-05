@@ -39,8 +39,6 @@ type Banning struct {
 
 type Stats struct {
 	sync.Mutex
-	// We are using atomic with LastBeat,
-	// so moving it before the rest in order to avoid alignment issue
 	LastBeat      int64
 	BannedAt      int64
 	ValidShares   int32
