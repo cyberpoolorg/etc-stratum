@@ -86,7 +86,6 @@ func (u *PayoutsProcessor) Start() {
 		return
 	}
 
-	// Immediately process payouts after start
 	u.process()
 	timer.Reset(intv)
 
@@ -129,7 +128,7 @@ func (u *PayoutsProcessor) process() {
 		if !u.checkPeers() {
 			break
 		}
-		// Require unlocked account
+
 		if !u.isUnlockedAccount() {
 			break
 		}
