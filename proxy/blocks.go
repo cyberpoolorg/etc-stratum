@@ -90,7 +90,6 @@ func (s *ProxyServer) fetchBlockTemplate() {
 	s.blockTemplate.Store(&newTemplate)
 	log.Printf("New block to mine on %s at height %d / %s", rpc.Name, height, reply[0][0:10])
 
-	// Stratum
 	if s.config.Proxy.Stratum.Enabled {
 		go s.broadcastNewJobs()
 	}
