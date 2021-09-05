@@ -223,10 +223,7 @@ func (r *RPCClient) SendTransaction(from, to, gas, gasPrice, value string, autoG
 	if err != nil {
 		return reply, err
 	}
-	/* There is an inconsistence in a "standard". Geth returns error if it can't unlock signer account,
-	 * but Parity returns zero hash 0x000... if it can't send tx, so we must handle this case.
-	 * https://github.com/ethereum/wiki/wiki/JSON-RPC#returns-22
-	 */
+
 	if util.IsZeroHash(reply) {
 		err = errors.New("transaction is not yet available")
 	}
