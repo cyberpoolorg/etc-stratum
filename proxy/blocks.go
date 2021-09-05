@@ -59,7 +59,6 @@ func (s *ProxyServer) fetchBlockTemplate() {
 		log.Printf("Error while refreshing block template on %s: %s", rpc.Name, err)
 		return
 	}
-	// No need to update, we have fresh job
 	if t != nil && t.Header == reply[0] {
 		return
 	}
@@ -75,7 +74,7 @@ func (s *ProxyServer) fetchBlockTemplate() {
 		GetPendingBlockCache: pendingReply,
 		headers:              make(map[string]heightDiffPair),
 	}
-	// Copy job backlog and add current one
+
 	newTemplate.headers[reply[0]] = heightDiffPair{
 		diff:   util.TargetHexToDiff(reply[2]),
 		height: height,
