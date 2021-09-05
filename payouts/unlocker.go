@@ -32,8 +32,8 @@ type UnlockerConfig struct {
 
 const minDepth = 16
 
-var disinflationRateQuotient = big.NewInt(4) // Disinflation rate quotient for ECIP1017
-var disinflationRateDivisor = big.NewInt(5)  // Disinflation rate divisor for ECIP1017
+var disinflationRateQuotient = big.NewInt(4)
+var disinflationRateDivisor = big.NewInt(5)
 var big32 = big.NewInt(32)
 var big8 = big.NewInt(8)
 
@@ -78,7 +78,6 @@ func (u *BlockUnlocker) Start() {
 	timer := time.NewTimer(intv)
 	log.Printf("Set block unlock interval to %v", intv)
 
-	// Immediately unlock after start
 	u.unlockPendingBlocks()
 	u.unlockAndCreditMiners()
 	timer.Reset(intv)
@@ -103,23 +102,12 @@ type UnlockResult struct {
 	blocks         int
 }
 
-/* Geth does not provide consistent state when you need both new height and new job,
- * so in redis I am logging just what I have in a pool state on the moment when block found.
- * Having very likely incorrect height in database results in a weird block unlocking scheme,
- * when I have to check what the hell we actually found and traversing all the blocks with height-N and height+N
- * to make sure we will find it. We can't rely on round height here, it's just a reference point.
- * ISSUE: https://github.com/ethereum/go-ethereum/issues/2333
- */
 func (u *BlockUnlocker) unlockCandidates(candidates []*storage.BlockData) (*UnlockResult, error) {
 	result := &UnlockResult{}
 
-	// Data row is: "height:nonce:powHash:mixDigest:timestamp:diff:totalShares"
 	for _, candidate := range candidates {
 		orphan := true
 
-		/* Search for a normal block with wrong height here by traversing 16 blocks back and forward.
-		 * Also we are searching for a block that can include this one as uncle.
-		 */
 		if candidate.Height < minDepth {
 			orphan = false
 			// avoid scanning the first 16 blocks
@@ -161,7 +149,6 @@ func (u *BlockUnlocker) unlockCandidates(candidates []*storage.BlockData) (*Unlo
 				continue
 			}
 
-			// Trying to find uncle in current block during our forward check
 			for uncleIndex, uncleHash := range block.Uncles {
 				uncle, err := u.rpc.GetUncleByBlockNumberAndIndex(height, uncleIndex)
 				if err != nil {
@@ -188,12 +175,12 @@ func (u *BlockUnlocker) unlockCandidates(candidates []*storage.BlockData) (*Unlo
 					break
 				}
 			}
-			// Found block or uncle
+
 			if !orphan {
 				break
 			}
 		}
-		// Block is lost, we didn't find any valid block or uncle matching our data in a blockchain
+
 		if orphan {
 			result.orphans++
 			candidate.Orphan = true
@@ -205,15 +192,15 @@ func (u *BlockUnlocker) unlockCandidates(candidates []*storage.BlockData) (*Unlo
 }
 
 func matchCandidate(block *rpc.GetBlockReply, candidate *storage.BlockData) bool {
-	// Just compare hash if block is unlocked as immature
+
 	if len(candidate.Hash) > 0 && strings.EqualFold(candidate.Hash, block.Hash) {
 		return true
 	}
-	// Geth-style candidate matching
+
 	if len(block.Nonce) > 0 {
 		return strings.EqualFold(block.Nonce, candidate.Nonce)
 	}
-	// Parity's EIP: https://github.com/ethereum/EIPs/issues/95
+
 	if len(block.SealFields) == 2 {
 		return strings.EqualFold(candidate.Nonce, block.SealFields[1])
 	}
@@ -229,12 +216,10 @@ func (u *BlockUnlocker) handleBlock(block *rpc.GetBlockReply, candidate *storage
 	era := GetBlockEra(big.NewInt(candidate.Height), u.config.Ecip1017EraRounds)
 	reward := getConstReward(era)
 
-	// Add reward for including uncles
 	uncleReward := getRewardForUncle(reward)
 	rewardForUncles := big.NewInt(0).Mul(uncleReward, big.NewInt(int64(len(block.Uncles))))
 	reward.Add(reward, rewardForUncles)
 
-	// Add TX fees
 	extraTxReward, err := u.getExtraRewardForTx(block)
 	if err != nil {
 		return fmt.Errorf("Error while fetching TX receipt: %v", err)
@@ -513,16 +498,11 @@ func weiToShannonInt64(wei *big.Rat) int64 {
 	return value
 }
 
-// GetRewardByEra gets a block reward at disinflation rate.
-// Constants MaxBlockReward, DisinflationRateQuotient, and DisinflationRateDivisor assumed.
 func GetBlockWinnerRewardByEra(era *big.Int, blockReward *big.Int) *big.Int {
 	if era.Cmp(big.NewInt(0)) == 0 {
 		return new(big.Int).Set(blockReward)
 	}
 
-	// MaxBlockReward _r_ * (4/5)**era == MaxBlockReward * (4**era) / (5**era)
-	// since (q/d)**n == q**n / d**n
-	// qed
 	var q, d, r *big.Int = new(big.Int), new(big.Int), new(big.Int)
 
 	q.Exp(disinflationRateQuotient, era, nil)
@@ -534,10 +514,8 @@ func GetBlockWinnerRewardByEra(era *big.Int, blockReward *big.Int) *big.Int {
 	return r
 }
 
-// GetBlockEra gets which "Era" a given block is within, given an era length (ecip-1017 has era=5,000,000 blocks)
-// Returns a zero-index era number, so "Era 1": 0, "Era 2": 1, "Era 3": 2 ...
 func GetBlockEra(blockNum, eraLength *big.Int) *big.Int {
-	// If genesis block or impossible negative-numbered block, return zero-val.
+
 	if blockNum.Sign() < 1 {
 		return new(big.Int)
 	}
@@ -558,19 +536,16 @@ func getConstReward(era *big.Int) *big.Int {
 }
 
 func getRewardForUncle(blockReward *big.Int) *big.Int {
-	return new(big.Int).Div(blockReward, big32) //return new(big.Int).Div(reward, new(big.Int).SetInt64(32))
+	return new(big.Int).Div(blockReward, big32)
 }
 
 func getUncleReward(uHeight *big.Int, height *big.Int, era *big.Int, reward *big.Int) *big.Int {
-	// Era 1 (index 0):
-	//   An extra reward to the winning miner for including uncles as part of the block, in the form of an extra 1/32 (0.15625ETC) per uncle included, up to a maximum of two (2) uncles.
 	if era.Cmp(big.NewInt(0)) == 0 {
 		r := new(big.Int)
-		r.Add(uHeight, big8) // 2,534,998 + 8              = 2,535,006
-		r.Sub(r, height)     // 2,535,006 - 2,534,999        = 7
-		r.Mul(r, reward)     // 7 * 5e+18               = 35e+18
-		r.Div(r, big8)       // 35e+18 / 8                            = 7/8 * 5e+18
-
+		r.Add(uHeight, big8)
+		r.Sub(r, height)
+		r.Mul(r, reward)
+		r.Div(r, big8)
 		return r
 	}
 	return getRewardForUncle(reward)
