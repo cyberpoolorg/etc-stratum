@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/btcsuite/btcd v0.21.0-beta // indirect
-	github.com/cyberpoolorg/go-etchash v0.3.1
+	github.com/cyberpoolorg/go-etchash v0.3.0
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/etclabscore/go-etchash v0.0.0-20210701082654-a7a7229ffb51
 	github.com/ethereum/go-ethereum v1.10.8
