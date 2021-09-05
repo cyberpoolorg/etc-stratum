@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/etclabscore/go-etchash"
+	"github.com/cyberpoolorg/go-etchash"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -22,7 +22,6 @@ func (s *ProxyServer) processShare(login, id, ip string, t *BlockTemplate, param
 		} else if s.config.Network == "mordor" {
 			hasher = etchash.New(&ecip1099FBlockMordor, nil)
 		} else {
-			// unknown network
 			log.Printf("Unknown network configuration %s", s.config.Network)
 			return false, false
 		}
