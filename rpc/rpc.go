@@ -1,19 +1,20 @@
 package rpc
 
 import (
-	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
-	"net/http"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/cyberpoolorg/etc-stratum/util"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethrpc "github.com/ethereum/go-ethereum/rpc"
 )
 
 type RPCClient struct {
@@ -23,7 +24,7 @@ type RPCClient struct {
 	sick        bool
 	sickRate    int
 	successRate int
-	client      *http.Client
+	client      *ethrpc.Client
 }
 
 type GetBlockReply struct {
@@ -78,17 +79,24 @@ type JSONRpcResp struct {
 	Error  map[string]interface{} `json:"error"`
 }
 
-func NewRPCClient(name, url, timeout string) *RPCClient {
+func NewRPCClient(name, url, timeout string) (*RPCClient, error) {
 	rpcClient := &RPCClient{Name: name, Url: url}
 	timeoutIntv := util.MustParseDuration(timeout)
-	rpcClient.client = &http.Client{
-		Timeout: timeoutIntv,
+	c, _ := context.WithTimeout(context.Background(), timeoutIntv)
+	var err error
+	rpcClient.client, err = ethrpc.DialContext(c, rpcClient.Url)
+	if err != nil {
+		return nil, err
 	}
-	return rpcClient
+	if strings.HasPrefix(url, "http") {
+		rpcClient.client.SetHeader("Content-Type", "application/json")
+		rpcClient.client.SetHeader("Accept", "application/json")
+	}
+	return rpcClient, err
 }
 
 func (r *RPCClient) GetWork() ([]string, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getWork", []string{})
+	rpcResp, err := r.doPost("eth_getWork", []string{})
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +106,7 @@ func (r *RPCClient) GetWork() ([]string, error) {
 }
 
 func (r *RPCClient) GetPendingBlock() (*GetBlockReplyPart, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getBlockByNumber", []interface{}{"pending", false})
+	rpcResp, err := r.doPost("eth_getBlockByNumber", []interface{}{"pending", false})
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +134,7 @@ func (r *RPCClient) GetUncleByBlockNumberAndIndex(height int64, index int) (*Get
 }
 
 func (r *RPCClient) getBlockBy(method string, params []interface{}) (*GetBlockReply, error) {
-	rpcResp, err := r.doPost(r.Url, method, params)
+	rpcResp, err := r.doPost(method, params)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +147,7 @@ func (r *RPCClient) getBlockBy(method string, params []interface{}) (*GetBlockRe
 }
 
 func (r *RPCClient) GetTxReceipt(hash string) (*TxReceipt, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getTransactionReceipt", []string{hash})
+	rpcResp, err := r.doPost("eth_getTransactionReceipt", []string{hash})
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +160,7 @@ func (r *RPCClient) GetTxReceipt(hash string) (*TxReceipt, error) {
 }
 
 func (r *RPCClient) SubmitBlock(params []string) (bool, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_submitWork", params)
+	rpcResp, err := r.doPost("eth_submitWork", params)
 	if err != nil {
 		return false, err
 	}
@@ -162,7 +170,7 @@ func (r *RPCClient) SubmitBlock(params []string) (bool, error) {
 }
 
 func (r *RPCClient) GetBalance(address string) (*big.Int, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getBalance", []string{address, "latest"})
+	rpcResp, err := r.doPost("eth_getBalance", []string{address, "latest"})
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +184,7 @@ func (r *RPCClient) GetBalance(address string) (*big.Int, error) {
 
 func (r *RPCClient) Sign(from string, s string) (string, error) {
 	hash := sha256.Sum256([]byte(s))
-	rpcResp, err := r.doPost(r.Url, "eth_sign", []string{from, hexutil.Encode(hash[:])})
+	rpcResp, err := r.doPost("eth_sign", []string{from, hexutil.Encode(hash[:])})
 	var reply string
 	if err != nil {
 		return reply, err
@@ -192,7 +200,7 @@ func (r *RPCClient) Sign(from string, s string) (string, error) {
 }
 
 func (r *RPCClient) GetPeerCount() (int64, error) {
-	rpcResp, err := r.doPost(r.Url, "net_peerCount", nil)
+	rpcResp, err := r.doPost("net_peerCount", nil)
 	if err != nil {
 		return 0, err
 	}
@@ -214,7 +222,7 @@ func (r *RPCClient) SendTransaction(from, to, gas, gasPrice, value string, autoG
 		params["gas"] = gas
 		params["gasPrice"] = gasPrice
 	}
-	rpcResp, err := r.doPost(r.Url, "eth_sendTransaction", []interface{}{params})
+	rpcResp, err := r.doPost("eth_sendTransaction", []interface{}{params})
 	var reply string
 	if err != nil {
 		return reply, err
@@ -230,33 +238,23 @@ func (r *RPCClient) SendTransaction(from, to, gas, gasPrice, value string, autoG
 	return reply, err
 }
 
-func (r *RPCClient) doPost(url string, method string, params interface{}) (*JSONRpcResp, error) {
-	jsonReq := map[string]interface{}{"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
-	data, _ := json.Marshal(jsonReq)
+func (r *RPCClient) doPost(method string, params interface{}) (*JSONRpcResp, error) {
+	idJ, err := json.Marshal(rand.Int())
+	if err != nil {
+		return nil, err
+	}
+	idJR := json.RawMessage(idJ)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	req.Header.Set("Content-Length", (string)(len(data)))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	var rpcResp = &JSONRpcResp{
+		Id: &idJR,
+	}
 
-	resp, err := r.client.Do(req)
+	err = r.client.Call(&rpcResp.Result, method, params)
 	if err != nil {
 		r.markSick()
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	var rpcResp *JSONRpcResp
-	err = json.NewDecoder(resp.Body).Decode(&rpcResp)
-	if err != nil {
-		r.markSick()
-		return nil, err
-	}
-	if rpcResp.Error != nil {
-		r.markSick()
-		return nil, errors.New(rpcResp.Error["message"].(string))
-	}
-	return rpcResp, err
+	return rpcResp, nil
 }
 
 func (r *RPCClient) Check() bool {

@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/robfig/cron"
 	"github.com/cyberpoolorg/etc-stratum/rpc"
 	"github.com/cyberpoolorg/etc-stratum/storage"
 	"github.com/cyberpoolorg/etc-stratum/util"
+	"github.com/gorilla/mux"
+	"github.com/robfig/cron"
 )
 
 type ApiConfig struct {
@@ -63,7 +63,10 @@ type Entry struct {
 func NewApiServer(cfg *ApiConfig, settings map[string]interface{}, backend *storage.RedisClient) *ApiServer {
 	rpcDaemon := settings["BlockUnlocker"].(map[string]interface{})["Daemon"].(string)
 	rpcTimeout := settings["BlockUnlocker"].(map[string]interface{})["Timeout"].(string)
-	rpc := rpc.NewRPCClient("BlockUnlocker", rpcDaemon, rpcTimeout)
+	rpc, err := rpc.NewRPCClient("BlockUnlocker", rpcDaemon, rpcTimeout)
+	if err != nil {
+		log.Fatalf("Error while initializing RPC client: %v", err)
+	}
 	block, err := rpc.GetBlockByHeight(0)
 	if err != nil || block == nil {
 		log.Fatalf("Error while retrieving genesis block from node: %v", err)
@@ -141,7 +144,7 @@ func (s *ApiServer) Start() {
 		c.AddFunc(clientCharts, func() {
 			s.collectclientCharts()
 		})
-		
+
 		workerCharts := s.config.WorkerCharts
 		log.Printf("Worker charts config is :%v", workerCharts)
 		c.AddFunc(workerCharts, func() {
@@ -343,7 +346,7 @@ func (s *ApiServer) StatsIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *ApiServer) getWorkersNumber() (int64){
+func (s *ApiServer) getWorkersNumber() int64 {
 	numberofWorker := int64(0)
 	miners, err := s.backend.GetAllMinerAccount()
 	if err != nil {

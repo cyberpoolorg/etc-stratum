@@ -12,11 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/cyberpoolorg/etc-stratum/policy"
 	"github.com/cyberpoolorg/etc-stratum/rpc"
 	"github.com/cyberpoolorg/etc-stratum/storage"
 	"github.com/cyberpoolorg/etc-stratum/util"
+	"github.com/gorilla/mux"
 )
 
 type ProxyServer struct {
@@ -29,10 +29,10 @@ type ProxyServer struct {
 	policy             *policy.PolicyServer
 	hashrateExpiration time.Duration
 	failsCount         int64
-	sessionsMu sync.RWMutex
-	sessions   map[*Session]struct{}
-	timeout    time.Duration
-	Extranonce string
+	sessionsMu         sync.RWMutex
+	sessions           map[*Session]struct{}
+	timeout            time.Duration
+	Extranonce         string
 }
 
 type jobDetails struct {
@@ -61,8 +61,12 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
 	proxy.upstreams = make([]*rpc.RPCClient, len(cfg.Upstream))
+	var err error
 	for i, v := range cfg.Upstream {
-		proxy.upstreams[i] = rpc.NewRPCClient(v.Name, v.Url, v.Timeout)
+		proxy.upstreams[i], err = rpc.NewRPCClient(v.Name, v.Url, v.Timeout)
+		if err != nil {
+			log.Fatalf("Failed to start upstream RPC client: %v", err)
+		}
 		log.Printf("Upstream: %s => %s", v.Name, v.Url)
 	}
 	log.Printf("Default upstream: %s => %s", proxy.rpc().Name, proxy.rpc().Url)

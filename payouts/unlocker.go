@@ -68,7 +68,11 @@ func NewBlockUnlocker(cfg *UnlockerConfig, backend *storage.RedisClient, network
 		log.Fatalf("Immature depth can't be < %v, your depth is %v", minDepth, cfg.ImmatureDepth)
 	}
 	u := &BlockUnlocker{config: cfg, backend: backend}
-	u.rpc = rpc.NewRPCClient("BlockUnlocker", cfg.Daemon, cfg.Timeout)
+	var err error
+	u.rpc, err = rpc.NewRPCClient("BlockUnlocker", cfg.Daemon, cfg.Timeout)
+	if err != nil {
+		log.Fatalf("Failed to start RPC client: %v", err)
+	}
 	return u
 }
 

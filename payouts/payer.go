@@ -27,8 +27,8 @@ type PayoutsConfig struct {
 	Gas          string `json:"gas"`
 	GasPrice     string `json:"gasPrice"`
 	AutoGas      bool   `json:"autoGas"`
-	Threshold int64 `json:"threshold"`
-	BgSave    bool  `json:"bgsave"`
+	Threshold    int64  `json:"threshold"`
+	BgSave       bool   `json:"bgsave"`
 }
 
 func (self PayoutsConfig) GasHex() string {
@@ -51,7 +51,11 @@ type PayoutsProcessor struct {
 
 func NewPayoutsProcessor(cfg *PayoutsConfig, backend *storage.RedisClient) *PayoutsProcessor {
 	u := &PayoutsProcessor{config: cfg, backend: backend}
-	u.rpc = rpc.NewRPCClient("PayoutsProcessor", cfg.Daemon, cfg.Timeout)
+	var err error
+	u.rpc, err = rpc.NewRPCClient("PayoutsProcessor", cfg.Daemon, cfg.Timeout)
+	if err != nil {
+		log.Fatalf("Failed to start RPC client: %v", err)
+	}
 	return u
 }
 
